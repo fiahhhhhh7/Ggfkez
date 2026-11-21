@@ -68,8 +68,8 @@
       position: absolute;
       right: 6px;
       bottom: 8px;
-      width: 78px;
-      height: 78px;
+      width: 82px;
+      height: 82px;
       pointer-events: none;
     }
 
@@ -302,13 +302,12 @@
     const state = { ...INITIAL_ANGLES };
 
     let mainLogicalSize = 340;
-    let gizmoLogicalSize = 78;
+    let gizmoLogicalSize = 82;
 
     // 1. 高解析度 Canvas 初始化
     function setupHighResCanvases() {
       const dpr = Math.max(window.devicePixelRatio || 1, 2);
 
-      // 主畫布
       const mainRect = mainCanvas.getBoundingClientRect();
       mainLogicalSize = mainRect.width || 340;
       mainCanvas.width = Math.round(mainLogicalSize * dpr);
@@ -317,9 +316,8 @@
       mainCtx.lineCap = 'round';
       mainCtx.lineJoin = 'round';
 
-      // 右下角四軸指示器畫布
       const gizmoRect = gizmoCanvas.getBoundingClientRect();
-      gizmoLogicalSize = gizmoRect.width || 78;
+      gizmoLogicalSize = gizmoRect.width || 82;
       gizmoCanvas.width = Math.round(gizmoLogicalSize * dpr);
       gizmoCanvas.height = Math.round(gizmoLogicalSize * dpr);
       gizmoCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -400,40 +398,48 @@
       return [x, y, z, w];
     }
 
-    // 4. 繪製主超立方體
+    // 4. 共用的 4D -> 3D -> 2D 投影函式（確保主方塊與四軸指示器使用完全相同的透視規則）
+    const DISTANCE_4D = 2.8;
+    const DISTANCE_3D = 2.6;
+
+    function projectPoint4Dto2D(point4D, centerX, centerY, scale, flipY = false) {
+      const [rx, ry, rz, rw] = rotate4D(
+        point4D,
+        state.x,
+        state.y,
+        state.z,
+        state.w
+      );
+
+      // 4D -> 3D 透視投影
+      const factor4D = 1 / (DISTANCE_4D - rw);
+      const x3 = rx * factor4D;
+      const y3 = ry * factor4D;
+      const z3 = rz * factor4D;
+
+      // 3D -> 2D 透視投影
+      const factor3D = 1 / (DISTANCE_3D - z3);
+      const totalFactor = factor4D * factor3D;
+
+      const screenX = centerX + x3 * factor3D * scale;
+      const screenY = centerY + (flipY ? -y3 : y3) * factor3D * scale;
+
+      return {
+        x: screenX,
+        y: screenY,
+        depthFactor: totalFactor,
+        z3,
+        rw
+      };
+    }
+
+    // 5. 繪製主超立方體
     function renderTesseract() {
       mainCtx.clearRect(0, 0, mainLogicalSize, mainLogicalSize);
 
-      const projected = [];
+      const center = mainLogicalSize / 2;
       const scale = mainLogicalSize * 0.86;
-
-      for (let i = 0; i < vertices.length; i++) {
-        const [x, y, z, w] = rotate4D(
-          vertices[i],
-          state.x,
-          state.y,
-          state.z,
-          state.w
-        );
-
-        const distance4D = 2.8;
-        const factor4D = 1 / (distance4D - w);
-        const x3 = x * factor4D;
-        const y3 = y * factor4D;
-        const z3 = z * factor4D;
-
-        const distance3D = 2.6;
-        const factor3D = 1 / (distance3D - z3);
-
-        const screenX = mainLogicalSize / 2 + x3 * factor3D * scale;
-        const screenY = mainLogicalSize / 2 + y3 * factor3D * scale;
-
-        projected.push({
-          x: screenX,
-          y: screenY,
-          depthFactor: factor4D * factor3D
-        });
-      }
+      const projected = vertices.map(v => projectPoint4Dto2D(v, center, center, scale, false));
 
       // 繪製邊線
       for (const [i, j] of edges) {
@@ -477,19 +483,19 @@
       }
     }
 
-    // 5. 繪製右下角四軸方向指示箭頭 (Gizmo)
+    // 6. 繪製右下角四軸方向指示箭頭 (Gizmo)——與方塊使用完全相同的 4D->3D->2D 投影管線
     function drawArrow(ctx, fromX, fromY, toX, toY, color) {
       const dx = toX - fromX;
       const dy = toY - fromY;
       const len = Math.hypot(dx, dy);
-      if (len < 2) return;
+      if (len < 1.5) return;
 
       const angle = Math.atan2(dy, dx);
-      const headLen = Math.min(6.5, len * 0.35);
+      const headLen = Math.min(6.2, len * 0.36);
 
       ctx.strokeStyle = color;
       ctx.fillStyle = color;
-      ctx.lineWidth = 2.6;
+      ctx.lineWidth = 2.5;
 
       ctx.beginPath();
       ctx.moveTo(fromX, fromY);
@@ -513,55 +519,37 @@
     function renderAxisGizmo() {
       gizmoCtx.clearRect(0, 0, gizmoLogicalSize, gizmoLogicalSize);
 
-      const cx = gizmoLogicalSize * 0.48;
-      const cy = gizmoLogicalSize * 0.54;
-      const axisLen = gizmoLogicalSize * 0.36;
+      const cx = gizmoLogicalSize / 2;
+      const cy = gizmoLogicalSize / 2;
+      const axisUnitLength = 1.0;
+      const gizmoScale = gizmoLogicalSize * 0.88;
 
-      // 基準等角視角基底向量，確保 0,0,0,0 時呈現概念圖中的 Y軸朝上、X左下、Z右下、W右上 結構
-      const baseVectors = [
-        { name: 'w', vec: [0, 0, 0, 1], baseAngle: -Math.PI / 4, color: '#ffe366' },
-        { name: 'x', vec: [1, 0, 0, 0], baseAngle: (Math.PI * 5) / 6, color: '#ff1e1e' },
-        { name: 'y', vec: [0, 1, 0, 0], baseAngle: -Math.PI / 2, color: '#3b4cca' },
-        { name: 'z', vec: [0, 0, 1, 0], baseAngle: Math.PI / 6, color: '#1ec828' }
+      // 投影原點 (0, 0, 0, 0) 與四個正方向單位向量 (+W, +X, +Y, +Z)
+      const origin2D = projectPoint4Dto2D([0, 0, 0, 0], cx, cy, gizmoScale, false);
+
+      const axisDefs = [
+        { name: 'w', tip: [0, 0, 0, axisUnitLength], color: '#ffe366' },
+        { name: 'x', tip: [axisUnitLength, 0, 0, 0], color: '#ff1e1e' },
+        { name: 'y', tip: [0, axisUnitLength, 0, 0], color: '#3b4cca' },
+        { name: 'z', tip: [0, 0, axisUnitLength, 0], color: '#1ec828' }
       ];
 
-      // 計算每個軸經過當前四維旋轉後的投影方向
-      const projectedAxes = baseVectors.map(item => {
-        const [rx, ry, rz, rw] = rotate4D(
-          item.vec,
-          state.x,
-          state.y,
-          state.z,
-          state.w
-        );
-
-        // 將四個分量對應到基準方向向量疊加
-        const screenVx =
-          rx * Math.cos((Math.PI * 5) / 6) +
-          ry * Math.cos(-Math.PI / 2) +
-          rz * Math.cos(Math.PI / 6) +
-          rw * Math.cos(-Math.PI / 4);
-
-        const screenVy =
-          rx * Math.sin((Math.PI * 5) / 6) +
-          ry * Math.sin(-Math.PI / 2) +
-          rz * Math.sin(Math.PI / 6) +
-          rw * Math.sin(-Math.PI / 4);
-
-        const depth = rz + rw * 0.5;
-
+      const projectedAxes = axisDefs.map(def => {
+        const tip2D = projectPoint4Dto2D(def.tip, cx, cy, gizmoScale, false);
         return {
-          toX: cx + screenVx * axisLen,
-          toY: cy + screenVy * axisLen,
-          color: item.color,
-          depth
+          fromX: origin2D.x,
+          fromY: origin2D.y,
+          toX: tip2D.x,
+          toY: tip2D.y,
+          color: def.color,
+          depthFactor: tip2D.depthFactor
         };
       });
 
-      // 依深度排序繪製箭頭
-      projectedAxes.sort((a, b) => a.depth - b.depth);
+      // 由遠到近繪製各軸箭頭，遮擋關係與方塊深度一致
+      projectedAxes.sort((a, b) => a.depthFactor - b.depthFactor);
       for (const ax of projectedAxes) {
-        drawArrow(gizmoCtx, cx, cy, ax.toX, ax.toY, ax.color);
+        drawArrow(gizmoCtx, ax.fromX, ax.fromY, ax.toX, ax.toY, ax.color);
       }
     }
 
@@ -570,7 +558,7 @@
       renderAxisGizmo();
     }
 
-    // 6. 雙向同步滑桿與數值輸入
+    // 7. 雙向同步滑桿與數值輸入
     function normalizeDegrees(deg) {
       let val = parseFloat(deg);
       if (isNaN(val)) return 0;
@@ -615,7 +603,7 @@
       });
     });
 
-    // 7. Reset 歸零
+    // 8. Reset 歸零
     resetBtn.addEventListener('click', () => {
       axes.forEach(axis => {
         state[axis] = INITIAL_ANGLES[axis];
