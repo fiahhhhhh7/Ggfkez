@@ -30,7 +30,6 @@
       font-family: 'Poppins', sans-serif;
     }
 
-    /* 預設直向視窗容器 */
     .app-frame {
       width: 100%;
       max-width: 440px;
@@ -45,10 +44,10 @@
       position: relative;
     }
 
-    /* 左／上：超立方體畫布 + 四軸方向指示器 */
     .viewport-section {
       position: relative;
       width: 100%;
+      height: 320px;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -57,8 +56,8 @@
 
     canvas#tesseractCanvas {
       display: block;
-      width: min(320px, 72vw, 42vh);
-      height: min(320px, 72vw, 42vh);
+      width: 300px;
+      height: 300px;
       cursor: grab;
     }
 
@@ -66,17 +65,15 @@
       cursor: grabbing;
     }
 
-    /* 四軸方向指示器 (Red: x, Blue: y, Green: z, Yellow: w) */
     canvas#axisGizmo {
       position: absolute;
-      right: 4px;
-      bottom: 4px;
+      right: 6px;
+      bottom: 6px;
       width: 82px;
       height: 82px;
       pointer-events: none;
     }
 
-    /* 右／下：控制滑桿區塊 */
     .controls-section {
       width: 100%;
       display: flex;
@@ -92,7 +89,6 @@
       width: 100%;
     }
 
-    /* 左側標籤與無框可輸入數值 */
     .label-value-group {
       display: flex;
       align-items: baseline;
@@ -136,7 +132,6 @@
       margin: 0;
     }
 
-    /* 滑桿軌道 */
     input[type="range"] {
       -webkit-appearance: none;
       appearance: none;
@@ -149,7 +144,6 @@
       touch-action: none;
     }
 
-    /* 滑桿圓點 (WebKit) */
     input[type="range"]::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
@@ -164,7 +158,6 @@
       transform: scale(1.12);
     }
 
-    /* 滑桿圓點 (Firefox) */
     input[type="range"]::-moz-range-thumb {
       width: 21px;
       height: 21px;
@@ -174,7 +167,6 @@
       transition: transform 0.1s ease;
     }
 
-    /* 四個軸圓點配色：w 黃、x 紅、y 藍、z 綠 */
     #slider-w::-webkit-slider-thumb { background: #ffe366; }
     #slider-w::-moz-range-thumb { background: #ffe366; }
 
@@ -187,7 +179,6 @@
     #slider-z::-webkit-slider-thumb { background: #1ec828; }
     #slider-z::-moz-range-thumb { background: #1ec828; }
 
-    /* Reset 按鈕列 */
     .footer-row {
       width: 100%;
       display: flex;
@@ -235,28 +226,26 @@
       }
 
       .viewport-section {
-        width: auto;
-        flex: 1.1;
-        height: 100%;
-        max-width: 540px;
+        width: 440px;
+        height: 440px;
+        flex: none;
       }
 
       canvas#tesseractCanvas {
-        width: min(440px, 44vw, 76vh);
-        height: min(440px, 44vw, 76vh);
+        width: 420px;
+        height: 420px;
       }
 
       canvas#axisGizmo {
-        right: 12px;
-        bottom: 12px;
+        right: 10px;
+        bottom: 10px;
         width: 96px;
         height: 96px;
       }
 
       .controls-section {
-        flex: 0.9;
-        width: auto;
-        max-width: 400px;
+        flex: 0 1 380px;
+        width: 380px;
         gap: 28px;
         justify-content: center;
       }
@@ -270,13 +259,11 @@
 <body>
 
   <div class="app-frame">
-    <!-- 左／上：超立方體主畫布與軸向指示器 -->
     <div class="viewport-section">
-      <canvas id="tesseractCanvas" width="640" height="640"></canvas>
-      <canvas id="axisGizmo" width="164" height="164"></canvas>
+      <canvas id="tesseractCanvas" width="840" height="840"></canvas>
+      <canvas id="axisGizmo" width="192" height="192"></canvas>
     </div>
 
-    <!-- 右／下：控制項：順序為 w, x, y, z -->
     <div class="controls-section">
       <div class="slider-row">
         <div class="label-value-group">
@@ -334,41 +321,15 @@
 
     const resetBtn = document.getElementById('reset-btn');
 
-    // 預設角度為 0, 0, 0, 0
     const INITIAL_ANGLES = { w: 0, x: 0, y: 0, z: 0 };
     const state = { ...INITIAL_ANGLES };
 
-    let mainLogicalSize = 320;
-    let gizmoLogicalSize = 82;
+    mainCtx.lineCap = 'round';
+    mainCtx.lineJoin = 'round';
+    gizmoCtx.lineCap = 'round';
+    gizmoCtx.lineJoin = 'round';
 
-    // 1. 高解析度 Canvas 初始化（具備安全最小尺寸防呆）
-    function setupHighResCanvases() {
-      const dpr = Math.max(window.devicePixelRatio || 1, 2);
-
-      const mainRect = mainCanvas.getBoundingClientRect();
-      const rawMainSize = Math.min(mainRect.width, mainRect.height);
-      mainLogicalSize = rawMainSize >= 80 ? rawMainSize : 320;
-
-      mainCanvas.width = Math.round(mainLogicalSize * dpr);
-      mainCanvas.height = Math.round(mainLogicalSize * dpr);
-      mainCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      mainCtx.lineCap = 'round';
-      mainCtx.lineJoin = 'round';
-
-      const gizmoRect = gizmoCanvas.getBoundingClientRect();
-      const rawGizmoSize = Math.min(gizmoRect.width, gizmoRect.height);
-      gizmoLogicalSize = rawGizmoSize >= 40 ? rawGizmoSize : 82;
-
-      gizmoCanvas.width = Math.round(gizmoLogicalSize * dpr);
-      gizmoCanvas.height = Math.round(gizmoLogicalSize * dpr);
-      gizmoCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      gizmoCtx.lineCap = 'round';
-      gizmoCtx.lineJoin = 'round';
-
-      render();
-    }
-
-    // 2. 建立超立方體 16 個頂點與 32 條邊
+    // 16 個四維頂點 (x, y, z, w ∈ {-1, 1})
     const vertices = [];
     for (let i = 0; i < 16; i++) {
       vertices.push([
@@ -379,6 +340,7 @@
       ]);
     }
 
+    // 32 條邊
     const edges = [];
     for (let i = 0; i < 16; i++) {
       for (let j = i + 1; j < 16; j++) {
@@ -390,7 +352,6 @@
       }
     }
 
-    // 3. 四維旋轉運算
     function degToRad(deg) {
       return (deg * Math.PI) / 180;
     }
@@ -404,7 +365,6 @@
 
       let t1, t2;
 
-      // W 軸：XW 平面旋轉
       if (aw !== 0) {
         t1 = x * Math.cos(aw) - w * Math.sin(aw);
         t2 = x * Math.sin(aw) + w * Math.cos(aw);
@@ -412,7 +372,6 @@
         w = t2;
       }
 
-      // X 軸：YZ 平面旋轉
       if (ax !== 0) {
         t1 = y * Math.cos(ax) - z * Math.sin(ax);
         t2 = y * Math.sin(ax) + z * Math.cos(ax);
@@ -420,7 +379,6 @@
         z = t2;
       }
 
-      // Y 軸：XZ 平面旋轉
       if (ay !== 0) {
         t1 = x * Math.cos(ay) + z * Math.sin(ay);
         t2 = -x * Math.sin(ay) + z * Math.cos(ay);
@@ -428,7 +386,6 @@
         z = t2;
       }
 
-      // Z 軸：XY 平面旋轉
       if (az !== 0) {
         t1 = x * Math.cos(az) - y * Math.sin(az);
         t2 = x * Math.sin(az) + y * Math.cos(az);
@@ -439,7 +396,6 @@
       return [x, y, z, w];
     }
 
-    // 4. 共用的 4D -> 3D -> 2D 投影函式
     const DISTANCE_4D = 2.8;
     const DISTANCE_3D = 2.6;
 
@@ -467,12 +423,12 @@
       };
     }
 
-    // 5. 繪製主超立方體
     function renderTesseract() {
-      mainCtx.clearRect(0, 0, mainLogicalSize, mainLogicalSize);
+      const size = mainCanvas.width;
+      mainCtx.clearRect(0, 0, size, size);
 
-      const center = mainLogicalSize / 2;
-      const scale = mainLogicalSize * 1.15;
+      const center = size / 2;
+      const scale = size * 1.15;
       const projected = vertices.map(v => projectPoint4Dto2D(v, center, center, scale));
 
       for (const [i, j] of edges) {
@@ -481,7 +437,7 @@
         const avgDepth = (p1.depthFactor + p2.depthFactor) / 2;
 
         const normalized = Math.min(Math.max((avgDepth - 0.1) / 0.25, 0), 1);
-        const lineWidth = 0.75 + normalized * 1.4;
+        const lineWidth = (0.75 + normalized * 1.4) * (size / 420);
         const grayValue = Math.round(145 - normalized * 125);
 
         mainCtx.beginPath();
@@ -501,7 +457,7 @@
       for (const idx of sortedIndices) {
         const p = projected[idx];
         const normalized = Math.min(Math.max((p.depthFactor - 0.1) / 0.25, 0), 1);
-        const radius = 2.8 + normalized * 2.3;
+        const radius = (2.8 + normalized * 2.3) * (size / 420);
         const borderGray = Math.round(110 - normalized * 95);
 
         mainCtx.beginPath();
@@ -509,25 +465,24 @@
         mainCtx.fillStyle = nodeColors[idx % nodeColors.length];
         mainCtx.fill();
 
-        mainCtx.lineWidth = 1.0 + normalized * 0.65;
+        mainCtx.lineWidth = (1.0 + normalized * 0.65) * (size / 420);
         mainCtx.strokeStyle = `rgb(${borderGray}, ${borderGray}, ${borderGray})`;
         mainCtx.stroke();
       }
     }
 
-    // 6. 繪製四軸方向指示箭頭 (Gizmo)
-    function drawArrow(ctx, fromX, fromY, toX, toY, color) {
+    function drawArrow(ctx, fromX, fromY, toX, toY, color, scaleRatio) {
       const dx = toX - fromX;
       const dy = toY - fromY;
       const len = Math.hypot(dx, dy);
-      if (len < 1.5) return;
+      if (len < 2) return;
 
       const angle = Math.atan2(dy, dx);
-      const headLen = Math.min(6.2, len * 0.36);
+      const headLen = Math.min(12 * scaleRatio, len * 0.36);
 
       ctx.strokeStyle = color;
       ctx.fillStyle = color;
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 4.5 * scaleRatio;
 
       ctx.beginPath();
       ctx.moveTo(fromX, fromY);
@@ -549,20 +504,21 @@
     }
 
     function renderAxisGizmo() {
-      gizmoCtx.clearRect(0, 0, gizmoLogicalSize, gizmoLogicalSize);
+      const size = gizmoCanvas.width;
+      gizmoCtx.clearRect(0, 0, size, size);
 
-      const cx = gizmoLogicalSize / 2;
-      const cy = gizmoLogicalSize / 2;
-      const axisUnitLength = 1.0;
-      const gizmoScale = gizmoLogicalSize * 1.15;
+      const cx = size / 2;
+      const cy = size / 2;
+      const gizmoScale = size * 1.15;
+      const scaleRatio = size / 192;
 
       const origin2D = projectPoint4Dto2D([0, 0, 0, 0], cx, cy, gizmoScale);
 
       const axisDefs = [
-        { name: 'w', tip: [0, 0, 0, axisUnitLength], color: '#ffe366' },
-        { name: 'x', tip: [axisUnitLength, 0, 0, 0], color: '#ff1e1e' },
-        { name: 'y', tip: [0, axisUnitLength, 0, 0], color: '#3b4cca' },
-        { name: 'z', tip: [0, 0, axisUnitLength, 0], color: '#1ec828' }
+        { name: 'w', tip: [0, 0, 0, 1], color: '#ffe366' },
+        { name: 'x', tip: [1, 0, 0, 0], color: '#ff1e1e' },
+        { name: 'y', tip: [0, 1, 0, 0], color: '#3b4cca' },
+        { name: 'z', tip: [0, 0, 1, 0], color: '#1ec828' }
       ];
 
       const projectedAxes = axisDefs.map(def => {
@@ -579,7 +535,7 @@
 
       projectedAxes.sort((a, b) => a.depthFactor - b.depthFactor);
       for (const ax of projectedAxes) {
-        drawArrow(gizmoCtx, ax.fromX, ax.fromY, ax.toX, ax.toY, ax.color);
+        drawArrow(gizmoCtx, ax.fromX, ax.fromY, ax.toX, ax.toY, ax.color, scaleRatio);
       }
     }
 
@@ -588,7 +544,6 @@
       renderAxisGizmo();
     }
 
-    // 7. 角度正規化與控制項同步
     function normalizeDegrees(deg) {
       let val = parseFloat(deg);
       if (isNaN(val)) return 0;
@@ -635,7 +590,7 @@
       });
     });
 
-    // 8. 滑鼠拖曳方塊旋轉（x, y 軸）與滾輪控制 w 軸
+    // 滑鼠拖曳方塊旋轉（x, y 軸）與滾輪控制 w 軸
     let isDragging = false;
     let lastPointerX = 0;
     let lastPointerY = 0;
@@ -691,7 +646,6 @@
       setAxisAngle('w', nextW, false);
     }, { passive: false });
 
-    // 9. Reset 歸零
     resetBtn.addEventListener('click', () => {
       axes.forEach(axis => {
         state[axis] = INITIAL_ANGLES[axis];
@@ -701,21 +655,13 @@
       render();
     });
 
-    // 防止頁面捲動
     document.addEventListener('touchmove', (e) => {
       if (e.target.tagName !== 'INPUT') {
         e.preventDefault();
       }
     }, { passive: false });
 
-    window.addEventListener('resize', setupHighResCanvases);
-    window.addEventListener('orientationchange', () => {
-      setTimeout(setupHighResCanvases, 60);
-    });
-
-    // 確保在 DOM 與樣式套用後立即繪製，並在視窗載入完成時再次校準解析度
-    setupHighResCanvases();
-    window.addEventListener('load', setupHighResCanvases);
+    render();
   </script>
 </body>
 </html>
