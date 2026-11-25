@@ -329,7 +329,6 @@
     gizmoCtx.lineCap = 'round';
     gizmoCtx.lineJoin = 'round';
 
-    // 16 個四維頂點 (x, y, z, w ∈ {-1, 1})
     const vertices = [];
     for (let i = 0; i < 16; i++) {
       vertices.push([
@@ -340,7 +339,6 @@
       ]);
     }
 
-    // 32 條邊
     const edges = [];
     for (let i = 0; i < 16; i++) {
       for (let j = i + 1; j < 16; j++) {
@@ -614,7 +612,7 @@
       lastPointerY = e.clientY;
 
       const nextY = normalizeDegrees(state.y + dx * DRAG_SENSITIVITY);
-      const nextX = normalizeDegrees(state.x + dy * DRAG_SENSITIVITY);
+      const nextX = normalizeDegrees(state.x - dy * DRAG_SENSITIVITY);
 
       state.y = nextY;
       state.x = nextX;
