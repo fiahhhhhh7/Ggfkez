@@ -53,15 +53,16 @@
       display: flex;
       justify-content: center;
       align-items: center;
+      min-width: 0;
       min-height: 0;
     }
 
     canvas#tesseractCanvas {
       display: block;
-      width: 100%;
-      max-width: 340px;
+      width: 320px;
+      height: 320px;
+      max-width: 100%;
       max-height: 100%;
-      aspect-ratio: 1 / 1;
       cursor: grab;
     }
 
@@ -244,10 +245,8 @@
       }
 
       canvas#tesseractCanvas {
-        width: min(460px, 76dvh);
-        height: min(460px, 76dvh);
-        max-width: none;
-        max-height: none;
+        width: 440px;
+        height: 440px;
       }
 
       canvas#axisGizmo {
@@ -277,7 +276,8 @@
         padding: 16px 26px 20px 26px;
       }
       canvas#tesseractCanvas {
-        max-width: 250px;
+        width: 240px;
+        height: 240px;
       }
       .controls-section {
         gap: 14px;
@@ -359,7 +359,7 @@
     const INITIAL_ANGLES = { w: 0, x: 0, y: 0, z: 0 };
     const state = { ...INITIAL_ANGLES };
 
-    let mainLogicalSize = 340;
+    let mainLogicalSize = 320;
     let gizmoLogicalSize = 82;
 
     // 1. 高解析度 Canvas 初始化
@@ -367,7 +367,11 @@
       const dpr = Math.max(window.devicePixelRatio || 1, 2);
 
       const mainRect = mainCanvas.getBoundingClientRect();
-      mainLogicalSize = Math.min(mainRect.width, mainRect.height) || 340;
+      const measuredMain = Math.min(
+        mainRect.width || mainCanvas.clientWidth || 320,
+        mainRect.height || mainCanvas.clientHeight || 320
+      );
+      mainLogicalSize = measuredMain > 20 ? measuredMain : 320;
       mainCanvas.width = Math.round(mainLogicalSize * dpr);
       mainCanvas.height = Math.round(mainLogicalSize * dpr);
       mainCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -375,7 +379,11 @@
       mainCtx.lineJoin = 'round';
 
       const gizmoRect = gizmoCanvas.getBoundingClientRect();
-      gizmoLogicalSize = Math.min(gizmoRect.width, gizmoRect.height) || 82;
+      const measuredGizmo = Math.min(
+        gizmoRect.width || gizmoCanvas.clientWidth || 82,
+        gizmoRect.height || gizmoCanvas.clientHeight || 82
+      );
+      gizmoLogicalSize = measuredGizmo > 10 ? measuredGizmo : 82;
       gizmoCanvas.width = Math.round(gizmoLogicalSize * dpr);
       gizmoCanvas.height = Math.round(gizmoLogicalSize * dpr);
       gizmoCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -494,7 +502,7 @@
       mainCtx.clearRect(0, 0, mainLogicalSize, mainLogicalSize);
 
       const center = mainLogicalSize / 2;
-      const scale = mainLogicalSize * 0.86;
+      const scale = mainLogicalSize * 1.15;
       const projected = vertices.map(v => projectPoint4Dto2D(v, center, center, scale, false));
 
       for (const [i, j] of edges) {
@@ -503,7 +511,7 @@
         const avgDepth = (p1.depthFactor + p2.depthFactor) / 2;
 
         const normalized = Math.min(Math.max((avgDepth - 0.1) / 0.25, 0), 1);
-        const lineWidth = 0.65 + normalized * 1.3;
+        const lineWidth = 0.75 + normalized * 1.4;
         const grayValue = Math.round(145 - normalized * 125);
 
         mainCtx.beginPath();
@@ -523,7 +531,7 @@
       for (const idx of sortedIndices) {
         const p = projected[idx];
         const normalized = Math.min(Math.max((p.depthFactor - 0.1) / 0.25, 0), 1);
-        const radius = 2.6 + normalized * 2.2;
+        const radius = 2.8 + normalized * 2.3;
         const borderGray = Math.round(110 - normalized * 95);
 
         mainCtx.beginPath();
@@ -531,7 +539,7 @@
         mainCtx.fillStyle = nodeColors[idx % nodeColors.length];
         mainCtx.fill();
 
-        mainCtx.lineWidth = 0.95 + normalized * 0.65;
+        mainCtx.lineWidth = 1.0 + normalized * 0.65;
         mainCtx.strokeStyle = `rgb(${borderGray}, ${borderGray}, ${borderGray})`;
         mainCtx.stroke();
       }
@@ -576,7 +584,7 @@
       const cx = gizmoLogicalSize / 2;
       const cy = gizmoLogicalSize / 2;
       const axisUnitLength = 1.0;
-      const gizmoScale = gizmoLogicalSize * 0.88;
+      const gizmoScale = gizmoLogicalSize * 1.15;
 
       const origin2D = projectPoint4Dto2D([0, 0, 0, 0], cx, cy, gizmoScale, false);
 
@@ -661,8 +669,8 @@
     let isDragging = false;
     let lastPointerX = 0;
     let lastPointerY = 0;
-    const DRAG_SENSITIVITY = 0.55; // 每像素對應的角度變化量
-    const WHEEL_SENSITIVITY = 0.05; // 滾輪 deltaY 對應 w 軸角度變化量
+    const DRAG_SENSITIVITY = 0.55;
+    const WHEEL_SENSITIVITY = 0.05;
 
     mainCanvas.addEventListener('pointerdown', (e) => {
       if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
@@ -707,7 +715,6 @@
     mainCanvas.addEventListener('pointerup', stopDragging);
     mainCanvas.addEventListener('pointercancel', stopDragging);
 
-    // 滑鼠滾輪控制 w 軸
     mainCanvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       const nextW = normalizeDegrees(state.w + e.deltaY * WHEEL_SENSITIVITY);
@@ -720,15 +727,4 @@
         state[axis] = INITIAL_ANGLES[axis];
         sliders[axis].value = INITIAL_ANGLES[axis];
         inputs[axis].value = INITIAL_ANGLES[axis];
-      });
-      render();
-    });
-
-    // 防止頁面捲動
-    document.addEventListener('touchmove', (e) => {
-      if (e.target.tagName !== 'INPUT') {
-        e.preventDefault();
-      }
-    }, { passive: false });
-
-    
+      })
