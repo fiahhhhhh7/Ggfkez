@@ -30,7 +30,7 @@
       font-family: 'Poppins', sans-serif;
     }
 
-    /* 直向白色主容器，對應概念圖的手機比例視窗 */
+    /* 預設直向視窗容器 */
     .app-frame {
       width: 100%;
       max-width: 440px;
@@ -45,7 +45,7 @@
       position: relative;
     }
 
-    /* 上半部：超立方體畫布 + 右下角四軸方向指示器 */
+    /* 左／上：超立方體畫布 + 四軸方向指示器 */
     .viewport-section {
       position: relative;
       width: 100%;
@@ -60,10 +60,16 @@
       display: block;
       width: 100%;
       max-width: 340px;
+      max-height: 100%;
       aspect-ratio: 1 / 1;
+      cursor: grab;
     }
 
-    /* 右下角四軸方向指示器 (Red: x, Blue: y, Green: z, Yellow: w) */
+    canvas#tesseractCanvas.dragging {
+      cursor: grabbing;
+    }
+
+    /* 四軸方向指示器 (Red: x, Blue: y, Green: z, Yellow: w) */
     canvas#axisGizmo {
       position: absolute;
       right: 6px;
@@ -73,7 +79,7 @@
       pointer-events: none;
     }
 
-    /* 下半部：控制滑桿區塊 */
+    /* 右／下：控制滑桿區塊 */
     .controls-section {
       width: 100%;
       display: flex;
@@ -89,7 +95,7 @@
       width: 100%;
     }
 
-    /* 左側標籤與無框可輸入數值 (例如 w: 0) */
+    /* 左側標籤與無框可輸入數值 */
     .label-value-group {
       display: flex;
       align-items: baseline;
@@ -184,7 +190,7 @@
     #slider-z::-webkit-slider-thumb { background: #1ec828; }
     #slider-z::-moz-range-thumb { background: #1ec828; }
 
-    /* 右下角 Reset 按鈕 */
+    /* Reset 按鈕列 */
     .footer-row {
       width: 100%;
       display: flex;
@@ -213,8 +219,60 @@
       transform: scale(0.95);
     }
 
-    /* 較矮螢幕微調間距以確保無捲動 */
-    @media (max-height: 680px) {
+    /* 電腦與橫式螢幕版面：立方體在左邊，bar 在右邊 */
+    @media (orientation: landscape) and (min-width: 640px) {
+      body {
+        background-color: #ffffff;
+      }
+
+      .app-frame {
+        width: 100%;
+        max-width: 1120px;
+        height: 100%;
+        max-height: 780px;
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
+        gap: 56px;
+        padding: 36px 48px;
+      }
+
+      .viewport-section {
+        flex: 1.15;
+        height: 100%;
+        max-width: 560px;
+      }
+
+      canvas#tesseractCanvas {
+        width: min(460px, 76dvh);
+        height: min(460px, 76dvh);
+        max-width: none;
+        max-height: none;
+      }
+
+      canvas#axisGizmo {
+        right: 12px;
+        bottom: 12px;
+        width: 96px;
+        height: 96px;
+      }
+
+      .controls-section {
+        flex: 0.85;
+        width: auto;
+        max-width: 400px;
+        gap: 28px;
+        padding-top: 0;
+        justify-content: center;
+      }
+
+      .footer-row {
+        margin-top: 12px;
+      }
+    }
+
+    /* 較矮直向螢幕微調間距以確保無捲動 */
+    @media (orientation: portrait) and (max-height: 680px) {
       .app-frame {
         padding: 16px 26px 20px 26px;
       }
@@ -233,13 +291,13 @@
 <body>
 
   <div class="app-frame">
-    <!-- 上半部主畫布與軸向指示器 -->
+    <!-- 左／上：超立方體主畫布與軸向指示器 -->
     <div class="viewport-section">
       <canvas id="tesseractCanvas"></canvas>
       <canvas id="axisGizmo"></canvas>
     </div>
 
-    <!-- 下半部控制項：順序為 w, x, y, z -->
+    <!-- 右／下：控制項：順序為 w, x, y, z -->
     <div class="controls-section">
       <div class="slider-row">
         <div class="label-value-group">
@@ -309,7 +367,7 @@
       const dpr = Math.max(window.devicePixelRatio || 1, 2);
 
       const mainRect = mainCanvas.getBoundingClientRect();
-      mainLogicalSize = mainRect.width || 340;
+      mainLogicalSize = Math.min(mainRect.width, mainRect.height) || 340;
       mainCanvas.width = Math.round(mainLogicalSize * dpr);
       mainCanvas.height = Math.round(mainLogicalSize * dpr);
       mainCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -317,7 +375,7 @@
       mainCtx.lineJoin = 'round';
 
       const gizmoRect = gizmoCanvas.getBoundingClientRect();
-      gizmoLogicalSize = gizmoRect.width || 82;
+      gizmoLogicalSize = Math.min(gizmoRect.width, gizmoRect.height) || 82;
       gizmoCanvas.width = Math.round(gizmoLogicalSize * dpr);
       gizmoCanvas.height = Math.round(gizmoLogicalSize * dpr);
       gizmoCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -398,7 +456,7 @@
       return [x, y, z, w];
     }
 
-    // 4. 共用的 4D -> 3D -> 2D 投影函式（確保主方塊與四軸指示器使用完全相同的透視規則）
+    // 4. 共用的 4D -> 3D -> 2D 投影函式
     const DISTANCE_4D = 2.8;
     const DISTANCE_3D = 2.6;
 
@@ -411,13 +469,11 @@
         state.w
       );
 
-      // 4D -> 3D 透視投影
       const factor4D = 1 / (DISTANCE_4D - rw);
       const x3 = rx * factor4D;
       const y3 = ry * factor4D;
       const z3 = rz * factor4D;
 
-      // 3D -> 2D 透視投影
       const factor3D = 1 / (DISTANCE_3D - z3);
       const totalFactor = factor4D * factor3D;
 
@@ -441,7 +497,6 @@
       const scale = mainLogicalSize * 0.86;
       const projected = vertices.map(v => projectPoint4Dto2D(v, center, center, scale, false));
 
-      // 繪製邊線
       for (const [i, j] of edges) {
         const p1 = projected[i];
         const p2 = projected[j];
@@ -459,7 +514,6 @@
         mainCtx.stroke();
       }
 
-      // 繪製頂點圓圈
       const sortedIndices = projected
         .map((_, idx) => idx)
         .sort((a, b) => projected[a].depthFactor - projected[b].depthFactor);
@@ -483,7 +537,7 @@
       }
     }
 
-    // 6. 繪製右下角四軸方向指示箭頭 (Gizmo)——與方塊使用完全相同的 4D->3D->2D 投影管線
+    // 6. 繪製四軸方向指示箭頭 (Gizmo)
     function drawArrow(ctx, fromX, fromY, toX, toY, color) {
       const dx = toX - fromX;
       const dy = toY - fromY;
@@ -524,7 +578,6 @@
       const axisUnitLength = 1.0;
       const gizmoScale = gizmoLogicalSize * 0.88;
 
-      // 投影原點 (0, 0, 0, 0) 與四個正方向單位向量 (+W, +X, +Y, +Z)
       const origin2D = projectPoint4Dto2D([0, 0, 0, 0], cx, cy, gizmoScale, false);
 
       const axisDefs = [
@@ -546,7 +599,6 @@
         };
       });
 
-      // 由遠到近繪製各軸箭頭，遮擋關係與方塊深度一致
       projectedAxes.sort((a, b) => a.depthFactor - b.depthFactor);
       for (const ax of projectedAxes) {
         drawArrow(gizmoCtx, ax.fromX, ax.fromY, ax.toX, ax.toY, ax.color);
@@ -558,7 +610,7 @@
       renderAxisGizmo();
     }
 
-    // 7. 雙向同步滑桿與數值輸入
+    // 7. 角度正規化與控制項同步
     function normalizeDegrees(deg) {
       let val = parseFloat(deg);
       if (isNaN(val)) return 0;
@@ -567,12 +619,18 @@
       return Math.round(val * 10) / 10;
     }
 
+    function setAxisAngle(axis, deg, shouldNormalize = false) {
+      const value = shouldNormalize ? normalizeDegrees(deg) : Math.round(parseFloat(deg) * 10) / 10;
+      if (isNaN(value)) return;
+      state[axis] = value;
+      inputs[axis].value = value;
+      sliders[axis].value = Math.max(-180, Math.min(180, value));
+      render();
+    }
+
     axes.forEach(axis => {
       sliders[axis].addEventListener('input', () => {
-        const val = parseFloat(sliders[axis].value);
-        state[axis] = val;
-        inputs[axis].value = val;
-        render();
+        setAxisAngle(axis, sliders[axis].value, false);
       });
 
       inputs[axis].addEventListener('input', () => {
@@ -587,11 +645,7 @@
       });
 
       const commitInput = () => {
-        const normalized = normalizeDegrees(inputs[axis].value);
-        state[axis] = normalized;
-        inputs[axis].value = normalized;
-        sliders[axis].value = normalized;
-        render();
+        setAxisAngle(axis, inputs[axis].value, true);
       };
 
       inputs[axis].addEventListener('change', commitInput);
@@ -603,7 +657,64 @@
       });
     });
 
-    // 8. Reset 歸零
+    // 8. 滑鼠拖曳方塊旋轉（x, y 軸）與滾輪控制 w 軸
+    let isDragging = false;
+    let lastPointerX = 0;
+    let lastPointerY = 0;
+    const DRAG_SENSITIVITY = 0.55; // 每像素對應的角度變化量
+    const WHEEL_SENSITIVITY = 0.05; // 滾輪 deltaY 對應 w 軸角度變化量
+
+    mainCanvas.addEventListener('pointerdown', (e) => {
+      if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
+      isDragging = true;
+      lastPointerX = e.clientX;
+      lastPointerY = e.clientY;
+      mainCanvas.classList.add('dragging');
+      mainCanvas.setPointerCapture(e.pointerId);
+    });
+
+    mainCanvas.addEventListener('pointermove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - lastPointerX;
+      const dy = e.clientY - lastPointerY;
+      lastPointerX = e.clientX;
+      lastPointerY = e.clientY;
+
+      const nextY = normalizeDegrees(state.y + dx * DRAG_SENSITIVITY);
+      const nextX = normalizeDegrees(state.x + dy * DRAG_SENSITIVITY);
+
+      state.y = nextY;
+      state.x = nextX;
+
+      inputs.y.value = nextY;
+      sliders.y.value = Math.max(-180, Math.min(180, nextY));
+
+      inputs.x.value = nextX;
+      sliders.x.value = Math.max(-180, Math.min(180, nextX));
+
+      render();
+    });
+
+    function stopDragging(e) {
+      if (!isDragging) return;
+      isDragging = false;
+      mainCanvas.classList.remove('dragging');
+      if (e && mainCanvas.hasPointerCapture(e.pointerId)) {
+        mainCanvas.releasePointerCapture(e.pointerId);
+      }
+    }
+
+    mainCanvas.addEventListener('pointerup', stopDragging);
+    mainCanvas.addEventListener('pointercancel', stopDragging);
+
+    // 滑鼠滾輪控制 w 軸
+    mainCanvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const nextW = normalizeDegrees(state.w + e.deltaY * WHEEL_SENSITIVITY);
+      setAxisAngle('w', nextW, false);
+    }, { passive: false });
+
+    // 9. Reset 歸零
     resetBtn.addEventListener('click', () => {
       axes.forEach(axis => {
         state[axis] = INITIAL_ANGLES[axis];
@@ -620,8 +731,4 @@
       }
     }, { passive: false });
 
-    window.addEventListener('resize', setupHighResCanvases);
-    setupHighResCanvases();
-  </script>
-</body>
-</html>
+    
