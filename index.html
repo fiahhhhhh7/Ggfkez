@@ -19,7 +19,7 @@
       padding: 0;
       width: 100%;
       height: 100%;
-      height: 100dvh;
+      min-height: 100vh;
       overflow: hidden;
       overscroll-behavior: none;
       touch-action: none;
@@ -39,9 +39,9 @@
       background-color: #ffffff;
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
+      justify-content: space-evenly;
       align-items: center;
-      padding: 28px 34px 36px 34px;
+      padding: 24px 34px 32px 34px;
       position: relative;
     }
 
@@ -49,20 +49,16 @@
     .viewport-section {
       position: relative;
       width: 100%;
-      flex: 1;
       display: flex;
       justify-content: center;
       align-items: center;
-      min-width: 0;
-      min-height: 0;
+      flex-shrink: 0;
     }
 
     canvas#tesseractCanvas {
       display: block;
-      width: 320px;
-      height: 320px;
-      max-width: 100%;
-      max-height: 100%;
+      width: min(320px, 72vw, 42vh);
+      height: min(320px, 72vw, 42vh);
       cursor: grab;
     }
 
@@ -73,8 +69,8 @@
     /* 四軸方向指示器 (Red: x, Blue: y, Green: z, Yellow: w) */
     canvas#axisGizmo {
       position: absolute;
-      right: 6px;
-      bottom: 8px;
+      right: 4px;
+      bottom: 4px;
       width: 82px;
       height: 82px;
       pointer-events: none;
@@ -85,8 +81,8 @@
       width: 100%;
       display: flex;
       flex-direction: column;
-      gap: 22px;
-      padding-top: 10px;
+      gap: 20px;
+      flex-shrink: 0;
     }
 
     .slider-row {
@@ -100,7 +96,7 @@
     .label-value-group {
       display: flex;
       align-items: baseline;
-      width: 78px;
+      width: 82px;
       flex-shrink: 0;
       font-size: 22px;
       font-weight: 500;
@@ -113,7 +109,7 @@
     }
 
     .angle-input {
-      width: 52px;
+      width: 56px;
       border: none;
       border-bottom: 1.5px solid transparent;
       background: transparent;
@@ -196,7 +192,7 @@
       width: 100%;
       display: flex;
       justify-content: flex-end;
-      margin-top: 8px;
+      margin-top: 6px;
     }
 
     button#reset-btn {
@@ -239,14 +235,15 @@
       }
 
       .viewport-section {
-        flex: 1.15;
+        width: auto;
+        flex: 1.1;
         height: 100%;
-        max-width: 560px;
+        max-width: 540px;
       }
 
       canvas#tesseractCanvas {
-        width: 440px;
-        height: 440px;
+        width: min(440px, 44vw, 76vh);
+        height: min(440px, 44vw, 76vh);
       }
 
       canvas#axisGizmo {
@@ -257,33 +254,15 @@
       }
 
       .controls-section {
-        flex: 0.85;
+        flex: 0.9;
         width: auto;
         max-width: 400px;
         gap: 28px;
-        padding-top: 0;
         justify-content: center;
       }
 
       .footer-row {
         margin-top: 12px;
-      }
-    }
-
-    /* 較矮直向螢幕微調間距以確保無捲動 */
-    @media (orientation: portrait) and (max-height: 680px) {
-      .app-frame {
-        padding: 16px 26px 20px 26px;
-      }
-      canvas#tesseractCanvas {
-        width: 240px;
-        height: 240px;
-      }
-      .controls-section {
-        gap: 14px;
-      }
-      .label-value-group, .angle-input {
-        font-size: 19px;
       }
     }
   </style>
@@ -293,8 +272,8 @@
   <div class="app-frame">
     <!-- 左／上：超立方體主畫布與軸向指示器 -->
     <div class="viewport-section">
-      <canvas id="tesseractCanvas"></canvas>
-      <canvas id="axisGizmo"></canvas>
+      <canvas id="tesseractCanvas" width="640" height="640"></canvas>
+      <canvas id="axisGizmo" width="164" height="164"></canvas>
     </div>
 
     <!-- 右／下：控制項：順序為 w, x, y, z -->
@@ -362,16 +341,14 @@
     let mainLogicalSize = 320;
     let gizmoLogicalSize = 82;
 
-    // 1. 高解析度 Canvas 初始化
+    // 1. 高解析度 Canvas 初始化（具備安全最小尺寸防呆）
     function setupHighResCanvases() {
       const dpr = Math.max(window.devicePixelRatio || 1, 2);
 
       const mainRect = mainCanvas.getBoundingClientRect();
-      const measuredMain = Math.min(
-        mainRect.width || mainCanvas.clientWidth || 320,
-        mainRect.height || mainCanvas.clientHeight || 320
-      );
-      mainLogicalSize = measuredMain > 20 ? measuredMain : 320;
+      const rawMainSize = Math.min(mainRect.width, mainRect.height);
+      mainLogicalSize = rawMainSize >= 80 ? rawMainSize : 320;
+
       mainCanvas.width = Math.round(mainLogicalSize * dpr);
       mainCanvas.height = Math.round(mainLogicalSize * dpr);
       mainCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -379,11 +356,9 @@
       mainCtx.lineJoin = 'round';
 
       const gizmoRect = gizmoCanvas.getBoundingClientRect();
-      const measuredGizmo = Math.min(
-        gizmoRect.width || gizmoCanvas.clientWidth || 82,
-        gizmoRect.height || gizmoCanvas.clientHeight || 82
-      );
-      gizmoLogicalSize = measuredGizmo > 10 ? measuredGizmo : 82;
+      const rawGizmoSize = Math.min(gizmoRect.width, gizmoRect.height);
+      gizmoLogicalSize = rawGizmoSize >= 40 ? rawGizmoSize : 82;
+
       gizmoCanvas.width = Math.round(gizmoLogicalSize * dpr);
       gizmoCanvas.height = Math.round(gizmoLogicalSize * dpr);
       gizmoCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -468,7 +443,7 @@
     const DISTANCE_4D = 2.8;
     const DISTANCE_3D = 2.6;
 
-    function projectPoint4Dto2D(point4D, centerX, centerY, scale, flipY = false) {
+    function projectPoint4Dto2D(point4D, centerX, centerY, scale) {
       const [rx, ry, rz, rw] = rotate4D(
         point4D,
         state.x,
@@ -485,15 +460,10 @@
       const factor3D = 1 / (DISTANCE_3D - z3);
       const totalFactor = factor4D * factor3D;
 
-      const screenX = centerX + x3 * factor3D * scale;
-      const screenY = centerY + (flipY ? -y3 : y3) * factor3D * scale;
-
       return {
-        x: screenX,
-        y: screenY,
-        depthFactor: totalFactor,
-        z3,
-        rw
+        x: centerX + x3 * factor3D * scale,
+        y: centerY + y3 * factor3D * scale,
+        depthFactor: totalFactor
       };
     }
 
@@ -503,7 +473,7 @@
 
       const center = mainLogicalSize / 2;
       const scale = mainLogicalSize * 1.15;
-      const projected = vertices.map(v => projectPoint4Dto2D(v, center, center, scale, false));
+      const projected = vertices.map(v => projectPoint4Dto2D(v, center, center, scale));
 
       for (const [i, j] of edges) {
         const p1 = projected[i];
@@ -586,7 +556,7 @@
       const axisUnitLength = 1.0;
       const gizmoScale = gizmoLogicalSize * 1.15;
 
-      const origin2D = projectPoint4Dto2D([0, 0, 0, 0], cx, cy, gizmoScale, false);
+      const origin2D = projectPoint4Dto2D([0, 0, 0, 0], cx, cy, gizmoScale);
 
       const axisDefs = [
         { name: 'w', tip: [0, 0, 0, axisUnitLength], color: '#ffe366' },
@@ -596,7 +566,7 @@
       ];
 
       const projectedAxes = axisDefs.map(def => {
-        const tip2D = projectPoint4Dto2D(def.tip, cx, cy, gizmoScale, false);
+        const tip2D = projectPoint4Dto2D(def.tip, cx, cy, gizmoScale);
         return {
           fromX: origin2D.x,
           fromY: origin2D.y,
@@ -727,4 +697,25 @@
         state[axis] = INITIAL_ANGLES[axis];
         sliders[axis].value = INITIAL_ANGLES[axis];
         inputs[axis].value = INITIAL_ANGLES[axis];
-      })
+      });
+      render();
+    });
+
+    // 防止頁面捲動
+    document.addEventListener('touchmove', (e) => {
+      if (e.target.tagName !== 'INPUT') {
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    window.addEventListener('resize', setupHighResCanvases);
+    window.addEventListener('orientationchange', () => {
+      setTimeout(setupHighResCanvases, 60);
+    });
+
+    // 確保在 DOM 與樣式套用後立即繪製，並在視窗載入完成時再次校準解析度
+    setupHighResCanvases();
+    window.addEventListener('load', setupHighResCanvases);
+  </script>
+</body>
+</html>
