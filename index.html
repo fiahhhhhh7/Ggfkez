@@ -324,8 +324,7 @@
     const INITIAL_ANGLES = { w: 0, x: 0, y: 0, z: 0 };
     const state = { ...INITIAL_ANGLES };
 
-    // 儲存 4x4 正交旋轉矩陣（以列向量或行向量一致的方式維護）
-    // 預設為單位矩陣（對應 0, 0, 0, 0）
+    // 累積滑鼠拖曳的 4x4 正交旋轉矩陣（初始為單位矩陣）
     function createIdentity4() {
       return [
         [1, 0, 0, 0],
@@ -335,7 +334,7 @@
       ];
     }
 
-    let rotMatrix4D = createIdentity4();
+    let dragMatrix4D = createIdentity4();
 
     mainCtx.lineCap = 'round';
     mainCtx.lineJoin = 'round';
@@ -367,8 +366,7 @@
       return (deg * Math.PI) / 180;
     }
 
-    // 建立單一四維平面旋轉矩陣
-    // planes 索引：0:x, 1:y, 2:z, 3:w
+    // 座標軸索引：0 = x, 1 = y, 2 = z, 3 = w
     function planeRotationMatrix4D(i, j, rad) {
       const m = createIdentity4();
       const c = Math.cos(rad);
@@ -408,90 +406,53 @@
       ];
     }
 
-    // 由 w, x, y, z 角度重建矩陣（用於滑桿、輸入框、reset）
-    function rebuildMatrixFromEuler() {
+    function rotateBySliderAngles(point) {
+      let [x, y, z, w] = point;
       const aw = degToRad(state.w);
       const ax = degToRad(state.x);
       const ay = degToRad(state.y);
       const az = degToRad(state.z);
 
-      let m = createIdentity4();
-      // x=0, y=1, z=2, w=3
-      if (aw !== 0) m = multiplyMat4(planeRotationMatrix4D(0, 3, aw), m);
-      if (ax !== 0) m = multiplyMat4(planeRotationMatrix4D(1, 2, ax), m);
-      if (ay !== 0) m = multiplyMat4(planeRotationMatrix4D(2, 0, ay), m);
-      if (az !== 0) m = multiplyMat4(planeRotationMatrix4D(0, 1, az), m);
-      rotMatrix4D = m;
-    }
+      let t1, t2;
 
-    // 依螢幕視角直覺旋轉：
-    // 滑鼠水平移動 (dx) -> 繞螢幕垂直軸轉（在視角空間中對應 XZ 平面旋轉）
-    // 滑鼠垂直移動 (dy) -> 繞螢幕水平軸轉（在視角空間中對應 YZ 平面旋轉）
-    function applyScreenSpaceDrag(dx, dy, sensitivity = 0.0085) {
-      const yaw = dx * sensitivity;   // 水平拖曳角度（弧度）
-      const pitch = -dy * sensitivity; // 垂直拖曳角度（弧度，往上拖為正）
-
-      // 構建視角空間的增量旋轉矩陣（先 pitch 再 yaw）
-      let deltaRot = createIdentity4();
-      if (pitch !== 0) {
-        deltaRot = multiplyMat4(planeRotationMatrix4D(1, 2, pitch), deltaRot);
-      }
-      if (yaw !== 0) {
-        deltaRot = multiplyMat4(planeRotationMatrix4D(2, 0, yaw), deltaRot);
+      if (aw !== 0) {
+        t1 = x * Math.cos(aw) - w * Math.sin(aw);
+        t2 = x * Math.sin(aw) + w * Math.cos(aw);
+        x = t1;
+        w = t2;
       }
 
-      // 左乘到既有旋轉矩陣，使旋轉始終相對於「目前螢幕視角」而非被鎖死的物件局部軸
-      rotMatrix4D = multiplyMat4(deltaRot, rotMatrix4D);
-
-      // 從矩陣反推近似顯示角度，同步滑桿與數值框（避免萬向節鎖死造成跳動，僅在放開或平滑顯示時更新）
-      syncUiFromMatrix();
-    }
-
-    function normalizeDegrees(deg) {
-      let val = parseFloat(deg);
-      if (isNaN(val)) return 0;
-      val = ((val + 180) % 360 + 360) % 360 - 180;
-      if (val === -180 && parseFloat(deg) > 0) val = 180;
-      return Math.round(val * 10) / 10;
-    }
-
-    function syncUiFromMatrix() {
-      // 提取直覺的 x, y, z 顯示角度（w 維持目前 w 角度）
-      const m = rotMatrix4D;
-      const sy = Math.max(-1, Math.min(1, m[2][0]));
-      const yRad = Math.asin(sy);
-      let xRad, zRad;
-
-      if (Math.abs(Math.cos(yRad)) > 1e-4) {
-        xRad = Math.atan2(-m[2][1], m[2][2]);
-        zRad = Math.atan2(-m[1][0], m[0][0]);
-      } else {
-        xRad = Math.atan2(m[1][2], m[1][1]);
-        zRad = 0;
+      if (ax !== 0) {
+        t1 = y * Math.cos(ax) - z * Math.sin(ax);
+        t2 = y * Math.sin(ax) + z * Math.cos(ax);
+        y = t1;
+        z = t2;
       }
 
-      const degX = normalizeDegrees((xRad * 180) / Math.PI);
-      const degY = normalizeDegrees((yRad * 180) / Math.PI);
-      const degZ = normalizeDegrees((zRad * 180) / Math.PI);
+      if (ay !== 0) {
+        t1 = x * Math.cos(ay) + z * Math.sin(ay);
+        t2 = -x * Math.sin(ay) + z * Math.cos(ay);
+        x = t1;
+        z = t2;
+      }
 
-      state.x = degX;
-      state.y = degY;
-      state.z = degZ;
+      if (az !== 0) {
+        t1 = x * Math.cos(az) - y * Math.sin(az);
+        t2 = x * Math.sin(az) + y * Math.cos(az);
+        x = t1;
+        y = t2;
+      }
 
-      inputs.x.value = degX;
-      inputs.y.value = degY;
-      inputs.z.value = degZ;
-
-      sliders.x.value = degX;
-      sliders.y.value = degY;
-      sliders.z.value = degZ;
+      return [x, y, z, w];
     }
 
     const DISTANCE_4D = 2.8;
     const DISTANCE_3D = 2.6;
 
     function projectPoint4Dto2D(point4D, centerX, centerY, scale) {
-      const [rx, ry, rz, rw] = applyMatrix4D(rotMatrix4D, point4D);
+      // 先套用滑桿／輸入框的 w, x, y, z 角度，再疊加滑鼠自由拖曳的視角旋轉
+      const afterSliders = rotateBySliderAngles(point4D);
+      const [rx, ry, rz, rw] = applyMatrix4D(dragMatrix4D, afterSliders);
 
       const factor4D = 1 / (DISTANCE_4D - rw);
       const x3 = rx * factor4D;
@@ -629,13 +590,20 @@
       renderAxisGizmo();
     }
 
+    function normalizeDegrees(deg) {
+      let val = parseFloat(deg);
+      if (isNaN(val)) return 0;
+      val = ((val + 180) % 360 + 360) % 360 - 180;
+      if (val === -180 && parseFloat(deg) > 0) val = 180;
+      return Math.round(val * 10) / 10;
+    }
+
     function setAxisAngleFromUi(axis, deg, shouldNormalize = false) {
       const value = shouldNormalize ? normalizeDegrees(deg) : Math.round(parseFloat(deg) * 10) / 10;
       if (isNaN(value)) return;
       state[axis] = value;
       inputs[axis].value = value;
       sliders[axis].value = Math.max(-180, Math.min(180, value));
-      rebuildMatrixFromEuler();
       render();
     }
 
@@ -651,7 +619,6 @@
         if (!isNaN(val)) {
           state[axis] = val;
           sliders[axis].value = Math.max(-180, Math.min(180, val));
-          rebuildMatrixFromEuler();
           render();
         }
       });
@@ -669,10 +636,11 @@
       });
     });
 
-    // 滑鼠／觸控自由拖曳旋轉
+    // 滑鼠／觸控直覺式螢幕視角旋轉（不將單一方向死綁某個軸）
     let isDragging = false;
     let lastPointerX = 0;
     let lastPointerY = 0;
+    const DRAG_SENSITIVITY = 0.0085;
 
     mainCanvas.addEventListener('pointerdown', (e) => {
       if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
@@ -690,7 +658,18 @@
       lastPointerX = e.clientX;
       lastPointerY = e.clientY;
 
-      applyScreenSpaceDrag(dx, dy);
+      const yaw = dx * DRAG_SENSITIVITY;
+      const pitch = -dy * DRAG_SENSITIVITY;
+
+      let deltaRot = createIdentity4();
+      if (pitch !== 0) {
+        deltaRot = multiplyMat4(planeRotationMatrix4D(1, 2, pitch), deltaRot);
+      }
+      if (yaw !== 0) {
+        deltaRot = multiplyMat4(planeRotationMatrix4D(2, 0, yaw), deltaRot);
+      }
+
+      dragMatrix4D = multiplyMat4(deltaRot, dragMatrix4D);
       render();
     });
 
@@ -706,15 +685,31 @@
     mainCanvas.addEventListener('pointerup', stopDragging);
     mainCanvas.addEventListener('pointercancel', stopDragging);
 
-    // 滑鼠滾輪控制 w 軸（在目前矩陣上疊加 XW 平面旋轉）
-    const WHEEL_SENSITIVITY = 0.0012;
+    // 滑鼠滾輪控制 w 軸
+    const WHEEL_SENSITIVITY = 0.05;
     mainCanvas.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const dwRad = e.deltaY * WHEEL_SENSITIVITY;
-      const deltaW = planeRotationMatrix4D(0, 3, dwRad);
-      rotMatrix4D = multiplyMat4(deltaW, rotMatrix4D);
+      const nextW = normalizeDegrees(state.w + e.deltaY * WHEEL_SENSITIVITY);
+      setAxisAngleFromUi('w', nextW, false);
+    }, { passive: false });
 
-      const nextW = normalizeDegrees(state.w + (dwRad * 180) / Math.PI);
-      state.w = nextW;
-      inputs.w.value = nextW;
-      sliders.w.value = Math.max(-18
+    resetBtn.addEventListener('click', () => {
+      axes.forEach(axis => {
+        state[axis] = INITIAL_ANGLES[axis];
+        sliders[axis].value = INITIAL_ANGLES[axis];
+        inputs[axis].value = INITIAL_ANGLES[axis];
+      });
+      dragMatrix4D = createIdentity4();
+      render();
+    });
+
+    document.addEventListener('touchmove', (e) => {
+      if (e.target.tagName !== 'INPUT') {
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    render();
+  </script>
+</body>
+</html>
